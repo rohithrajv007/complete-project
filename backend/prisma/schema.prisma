@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password_hash String
+  createdAt     DateTime  @default(now())
+  
+  projects        Project[] @relation("ProjectOwner")
+  issueAssignments IssueAssignee[] @relation("UserIssueAssignments")
+}
+
+model Otp {
+  id          String   @id @default(cuid())
+  email       String
+  otp         String
+  createdAt   DateTime @default(now())
+  expires_at  DateTime
+  
+  @@index([email])
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  
+  ownerId   String
+  owner     User     @relation("ProjectOwner", fields: [ownerId], references: [id])
+  
+  issues    Issue[]
+}
+
+model Issue {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      Status   @default(open)
+  priority    Priority @default(medium)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  
+  assignees   IssueAssignee[]
+}
+
+model IssueAssignee {
+  id         String   @id @default(cuid())
+  issueId    String
+  userId     String
+  assignedAt DateTime @default(now())
+  
+  issue      Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user       User     @relation("UserIssueAssignments", fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([issueId, userId])
+  // Removed @@map("issue_assignees") to let Prisma use default table name
+}
+
+enum Status {
+  open
+  in_progress
+  done
+}
+
+enum Priority {
+  low
+  medium
+  high
+}
