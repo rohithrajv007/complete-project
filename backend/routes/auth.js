@@ -5,10 +5,28 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 
 const prisma = new PrismaClient();
-const router = express.Router(); // DEFINED HERE
+const router = express.Router();
+
+// ✅ Authentication middleware for protected routes
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ message: 'Access token is required' });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ message: 'Invalid or expired token' });
+        }
+        req.user = user;
+        next();
+    });
+};
 
 // Configure Nodemailer
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
     service: 'gmail',
     auth: {
         user: process.env.GMAIL_USER,
@@ -17,7 +35,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // SIGNUP ROUTE
-router.post('/signup', async (req, res) => { // CHANGED to router and path fixed
+router.post('/signup', async (req, res) => {
     try {
         const { name, email, password } = req.body;
         if (!name || !email || !password) {
@@ -43,7 +61,7 @@ router.post('/signup', async (req, res) => { // CHANGED to router and path fixed
 });
 
 // LOGIN ROUTE
-router.post('/login', async (req, res) => { // CHANGED to router and path fixed
+router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!email || !password) {
@@ -74,7 +92,7 @@ router.post('/login', async (req, res) => { // CHANGED to router and path fixed
 });
 
 // FORGOT PASSWORD ROUTE
-router.post('/forgot-password', async (req, res) => { // CHANGED to router and path fixed
+router.post('/forgot-password', async (req, res) => {
     try {
         const { email } = req.body;
         const user = await prisma.user.findUnique({ where: { email } });
@@ -100,7 +118,7 @@ router.post('/forgot-password', async (req, res) => { // CHANGED to router and p
 });
 
 // VERIFY OTP & RESET PASSWORD ROUTE
-router.post('/verify-otp', async (req, res) => { // CHANGED to router and path fixed
+router.post('/verify-otp', async (req, res) => {
     try {
         const { email, otp, newPassword } = req.body;
         const otpRecord = await prisma.otp.findFirst({
@@ -120,6 +138,137 @@ router.post('/verify-otp', async (req, res) => { // CHANGED to router and path f
     } catch (error) {
         console.error('Verify OTP Error:', error);
         res.status(500).json({ message: 'Server error during password reset.' });
+    }
+});
+
+// ===============================================
+// ✅ NEW USER MANAGEMENT ENDPOINTS
+// ===============================================
+
+// GET ALL USERS (for user assignment)
+router.get('/users', authenticateToken, async (req, res) => {
+    try {
+        const users = await prisma.user.findMany({
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                createdAt: true
+            }
+        });
+        
+        console.log(`Retrieved ${users.length} users for assignment`);
+        res.json(users);
+    } catch (error) {
+        console.error('Get users error:', error);
+        res.status(500).json({ message: 'Failed to fetch users' });
+    }
+});
+
+// SEARCH USERS by name or email
+router.get('/users/search', authenticateToken, async (req, res) => {
+    try {
+        const { q } = req.query;
+        
+        if (!q) {
+            return res.status(400).json({ message: 'Search query is required' });
+        }
+        
+        const users = await prisma.user.findMany({
+            where: {
+                OR: [
+                    {
+                        name: {
+                            contains: q,
+                            mode: 'insensitive'
+                        }
+                    },
+                    {
+                        email: {
+                            contains: q,
+                            mode: 'insensitive'
+                        }
+                    }
+                ]
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                createdAt: true
+            }
+        });
+        
+        console.log(`Search found ${users.length} users for query: "${q}"`);
+        res.json(users);
+    } catch (error) {
+        console.error('Search users error:', error);
+        res.status(500).json({ message: 'Failed to search users' });
+    }
+});
+
+// FIND USER by exact email
+router.get('/users/find-by-email', authenticateToken, async (req, res) => {
+    try {
+        const { email } = req.query;
+        
+        if (!email) {
+            return res.status(400).json({ message: 'Email is required' });
+        }
+        
+        const user = await prisma.user.findUnique({
+            where: {
+                email: email.toLowerCase()
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                createdAt: true
+            }
+        });
+        
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        console.log(`Found user by email: ${email}`, user.name);
+        res.json(user);
+    } catch (error) {
+        console.error('Find user by email error:', error);
+        res.status(500).json({ message: 'Failed to find user' });
+    }
+});
+
+// FIND USERS by exact name
+router.get('/users/find-by-name', authenticateToken, async (req, res) => {
+    try {
+        const { name } = req.query;
+        
+        if (!name) {
+            return res.status(400).json({ message: 'Name is required' });
+        }
+        
+        const users = await prisma.user.findMany({
+            where: {
+                name: {
+                    equals: name,
+                    mode: 'insensitive'
+                }
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                createdAt: true
+            }
+        });
+        
+        console.log(`Found ${users.length} users with name: "${name}"`);
+        res.json(users);
+    } catch (error) {
+        console.error('Find user by name error:', error);
+        res.status(500).json({ message: 'Failed to find user by name' });
     }
 });
 
