@@ -25,8 +25,8 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// Configure Nodemailer
-const transporter = nodemailer.createTransporter({
+// ✅ FIXED: Configure Nodemailer (changed createTransporter to createTransport)
+const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
         user: process.env.GMAIL_USER,
@@ -142,7 +142,7 @@ router.post('/verify-otp', async (req, res) => {
 });
 
 // ===============================================
-// ✅ NEW USER MANAGEMENT ENDPOINTS
+// ✅ USER MANAGEMENT ENDPOINTS
 // ===============================================
 
 // GET ALL USERS (for user assignment)
